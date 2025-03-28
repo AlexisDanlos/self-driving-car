@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simulation de Voiture Autonome</title>
+    <title> Cars Simulation</title>
     <style>
         body { 
             margin: 0; 
@@ -26,10 +26,10 @@
 </head>
 <body>
     <div id="info">
-        <h2>Simulation de Voiture Autonome</h2>
-        <p>Circuit avec obstacles identifiables</p>
-        <p>La voiture rouge ralentit et évite les obstacles</p>
-        <p id="speedInfo">Vitesse actuelle: 100%</p>
+        <h2>Cars Simulation</h2>
+        <p>Circuit with obstacles and another car</p>
+        <p>The red car slows down and avoids obstacles</p>
+        <p id="speedInfo">Current speed: 100%</p>
         <p id="obstacleStatus"></p>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -37,21 +37,24 @@
     <script>
         // Configuration
         const config = {
-            roadWidth: 12,
+            roadWidth: 10,
+            roadLength: 150, // Circuit shorter
             carSpeed: 0.5,
-            safeDistance: 10,
-            brakeStrength: 0.8,
-            obstacleCount: 3, // Moins d'obstacles
-            detectionRange: 15,
-            avoidanceStrength: 0.7
+            autoSteerStrength: 0.1,
+            safeDistance: 10, // Safety distance
+            brakeStrength: 0.8, // Brake force (0-1)
+            otherCarsCount: 1, // Only one other car
+            obstacleCount: 5, // Number of obstacles on the road
+            detectionRange: 15, // Detection range of obstacles
+            avoidanceStrength: 0.7 // Evasion force (0-1)
         };
 
-        // Initialisation de Three.js
+        // Initialization of Three.js
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87CEEB); // Ciel bleu
+        scene.background = new THREE.Color(0x87CEEB); // Blue sky
         
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 50, 50);
+        camera.position.set(0, 30, 50);
         camera.lookAt(0, 0, 0);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -59,8 +62,9 @@
         renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
-        // Lumières
-        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
 
         const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
         directionalLight.position.set(50, 200, 100);
@@ -69,45 +73,59 @@
         directionalLight.shadow.mapSize.height = 1024;
         scene.add(directionalLight);
 
-        // Créer le sol
-        const ground = new THREE.Mesh(
-            new THREE.PlaneGeometry(500, 500),
-            new THREE.MeshStandardMaterial({ 
-                color: 0x228B22, 
-                roughness: 0.8, 
-                metalness: 0.2 
-            })
-        );
+        // Create the ground
+        const groundGeometry = new THREE.PlaneGeometry(500, 500);
+        const groundMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x228B22,  // Dark green
+            roughness: 0.8,
+            metalness: 0.2
+        });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         scene.add(ground);
 
-        // Définir le parcours de la route (courbe)
+        // Define the road path (curve)
         const roadCurve = new THREE.CurvePath();
         
-        // Créer un circuit ovale
+        // Create a simpler circuit (oval shape)
         const roadHeight = 0.05;
-        const ovalWidth = 70;
-        const ovalHeight = 40;
         
-        // Créer les points du circuit ovale
+        // Define the dimensions of the oval
+        const ovalWidth = 60;
+        const ovalHeight = 30;
+        
+        // Create the points of the oval circuit
         const points = [];
-        for (let i = 0; i <= 16; i++) {
-            const angle = (i / 16) * Math.PI * 2;
-            points.push(new THREE.Vector3(
-                ovalWidth * Math.cos(angle),
-                roadHeight,
-                ovalHeight * Math.sin(angle)
-            ));
+        const numPoints = 16; // Less points for a simpler circuit
+        
+        for (let i = 0; i < numPoints; i++) {
+            const angle = (i / numPoints) * Math.PI * 2;
+            const x = ovalWidth * Math.cos(angle);
+            const z = ovalHeight * Math.sin(angle);
+            points.push(new THREE.Vector3(x, roadHeight, z));
         }
         
-        // Créer une courbe lisse
+        // Close the loop by adding the first point to the end
+        points.push(points[0].clone());
+        
+        // Create a smooth curve from the points
         const curve = new THREE.CatmullRomCurve3(points);
         curve.closed = true;
         roadCurve.add(curve);
         
-        // Créer la route
+        // Create the road geometry
+        const roadGeometry = new THREE.BufferGeometry();
+        const roadMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x333333,  // Dark gray
+            roughness: 0.7,
+            metalness: 0.2
+        });
+        
+        // Get points along the curve
         const roadPoints = roadCurve.getPoints(500);
+        
+        // Create the road geometry from the points
         const roadShape = new THREE.Shape();
         roadShape.moveTo(0, -config.roadWidth / 2);
         roadShape.lineTo(0, config.roadWidth / 2);
@@ -118,87 +136,86 @@
             extrudePath: new THREE.CatmullRomCurve3(roadPoints)
         };
         
-        // Route
-        const road = new THREE.Mesh(
-            new THREE.ExtrudeGeometry(roadShape, extrudeSettings),
-            new THREE.MeshStandardMaterial({ 
-                color: 0x333333, 
-                roughness: 0.7, 
-                metalness: 0.2 
-            })
-        );
+        const roadExtrudeGeometry = new THREE.ExtrudeGeometry(roadShape, extrudeSettings);
+        const road = new THREE.Mesh(roadExtrudeGeometry, roadMaterial);
         road.receiveShadow = true;
         scene.add(road);
         
-        // Marquage central
+        // Add road markings
+        const lineMaterial = new THREE.MeshStandardMaterial({ color: 0xFFFFFF });
         const lineShape = new THREE.Shape();
         lineShape.moveTo(0, -0.2);
         lineShape.lineTo(0, 0.2);
         
-        const line = new THREE.Mesh(
-            new THREE.ExtrudeGeometry(lineShape, {
-                steps: 500,
-                bevelEnabled: false,
-                extrudePath: new THREE.CatmullRomCurve3(roadPoints)
-            }),
-            new THREE.MeshStandardMaterial({ color: 0xFFFFFF })
-        );
-        line.position.y = 0.05;
+        const lineExtrudeSettings = {
+            steps: 500,
+            bevelEnabled: false,
+            extrudePath: new THREE.CatmullRomCurve3(roadPoints)
+        };
+        
+        const lineGeometry = new THREE.ExtrudeGeometry(lineShape, lineExtrudeSettings);
+        const line = new THREE.Mesh(lineGeometry, lineMaterial);
+        line.position.y = 0.05;  // Légèrement au-dessus de la route
         scene.add(line);
         
-        // Fonction pour créer une voiture
+        // Create the car
         function createCar(color = 0xFF0000) {
             const carGroup = new THREE.Group();
             
-            // Corps de la voiture
-            carGroup.add(new THREE.Mesh(
-                new THREE.BoxGeometry(4, 1.5, 2),
-                new THREE.MeshStandardMaterial({ color: color })
-            )).position.set(0, 1, 0);
+            // Car body
+            const carBodyGeometry = new THREE.BoxGeometry(4, 1.5, 2);
+            const carBodyMaterial = new THREE.MeshStandardMaterial({ color: color });
+            const carBody = new THREE.Mesh(carBodyGeometry, carBodyMaterial);
+            carBody.position.y = 1;
+            carBody.castShadow = true;
+            carGroup.add(carBody);
             
-            // Habitacle
-            const carTop = new THREE.Mesh(
-                new THREE.BoxGeometry(2, 1, 1.8),
-                new THREE.MeshStandardMaterial({ color: 0x333333 })
-            );
+            // Car cabin
+            const carTopGeometry = new THREE.BoxGeometry(2, 1, 1.8);
+            const carTopMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
+            const carTop = new THREE.Mesh(carTopGeometry, carTopMaterial);
             carTop.position.set(-0.5, 2, 0);
+            carTop.castShadow = true;
             carGroup.add(carTop);
             
-            // Roues
+            // Wheels
             const wheelGeometry = new THREE.CylinderGeometry(0.5, 0.5, 0.4, 16);
             const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x111111 });
             
-            [
-                { x: 1.5, y: 0.5, z: 1.2 },  // Avant-droit
-                { x: 1.5, y: 0.5, z: -1.2 }, // Avant-gauche
-                { x: -1.5, y: 0.5, z: 1.2 }, // Arrière-droit
-                { x: -1.5, y: 0.5, z: -1.2 } // Arrière-gauche
-            ].forEach(pos => {
+            const wheelPositions = [
+                { x: 1.5, y: 0.5, z: 1.2 },  // Front right
+                { x: 1.5, y: 0.5, z: -1.2 }, // Front left
+                { x: -1.5, y: 0.5, z: 1.2 }, // Back right
+                { x: -1.5, y: 0.5, z: -1.2 } // Back left
+            ];
+            
+            wheelPositions.forEach(pos => {
                 const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
                 wheel.position.set(pos.x, pos.y, pos.z);
                 wheel.rotation.z = Math.PI / 2;
+                wheel.castShadow = true;
                 carGroup.add(wheel);
             });
             
             // Phares
+            const headlightGeometry = new THREE.SphereGeometry(0.3, 16, 16);
             const headlightMaterial = new THREE.MeshStandardMaterial({ 
                 color: 0xFFFF00,
                 emissive: 0xFFFF00,
                 emissiveIntensity: 0.5
             });
             
-            [
+            const headlightPositions = [
                 { x: 2, y: 1, z: 0.8 },  // Droit
                 { x: 2, y: 1, z: -0.8 }  // Gauche
-            ].forEach(pos => {
-                const headlight = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.3, 16, 16),
-                    headlightMaterial
-                );
+            ];
+            
+            headlightPositions.forEach(pos => {
+                const headlight = new THREE.Mesh(headlightGeometry, headlightMaterial);
                 headlight.position.set(pos.x, pos.y, pos.z);
                 carGroup.add(headlight);
                 
-                // Lumière de phare
+                // Add a headlight
                 const spotLight = new THREE.SpotLight(0xFFFFAA, 0.8);
                 spotLight.position.set(pos.x, pos.y, pos.z);
                 spotLight.target.position.set(pos.x + 10, pos.y, pos.z);
@@ -210,181 +227,191 @@
                 carGroup.add(spotLight.target);
             });
             
-            // Activer les ombres
-            carGroup.traverse(obj => {
-                if (obj.isMesh) obj.castShadow = true;
-            });
-            
             return carGroup;
         }
         
-        // Liste des types d'obstacles
-        const obstacleTypes = [
-            {
-                name: "Cône",
-                create: function() {
-                    const group = new THREE.Group();
-                    
-                    // Base
-                    group.add(new THREE.Mesh(
-                        new THREE.CylinderGeometry(0.7, 1, 0.3, 16),
-                        new THREE.MeshStandardMaterial({ color: 0x222222 })
-                    )).position.y = 0.15;
-                    
-                    // Cône
-                    group.add(new THREE.Mesh(
-                        new THREE.ConeGeometry(0.5, 1.5, 16),
-                        new THREE.MeshStandardMaterial({ 
+        // Fonction pour créer un obstacle
+        function createObstacle() {
+            const types = [
+                {
+                    // Traffic cone
+                    create: () => {
+                        const group = new THREE.Group();
+                        
+                        // Base of the cone
+                        const baseGeometry = new THREE.CylinderGeometry(0.7, 1, 0.3, 16);
+                        const baseMaterial = new THREE.MeshStandardMaterial({ color: 0x222222 });
+                        const base = new THREE.Mesh(baseGeometry, baseMaterial);
+                        base.position.y = 0.15;
+                        base.castShadow = true;
+                        base.receiveShadow = true;
+                        group.add(base);
+                        
+                        // Cone body
+                        const coneGeometry = new THREE.ConeGeometry(0.5, 1.5, 16);
+                        const coneMaterial = new THREE.MeshStandardMaterial({ 
                             color: 0xFF5500,
                             emissive: 0xFF5500,
                             emissiveIntensity: 0.2
-                        })
-                    )).position.y = 1;
-                    
-                    // Bandes réfléchissantes
-                    const bandMaterial = new THREE.MeshStandardMaterial({ 
-                        color: 0xFFFFFF,
-                        emissive: 0xFFFFFF,
-                        emissiveIntensity: 0.5
-                    });
-                    
-                    [0.7, 1.1].forEach(y => {
-                        const band = new THREE.Mesh(
-                            new THREE.TorusGeometry(0.4, 0.05, 8, 16),
-                            bandMaterial
-                        );
-                        band.position.y = y;
-                        band.rotation.x = Math.PI / 2;
-                        group.add(band);
-                    });
-                    
-                    return group;
+                        });
+                        const cone = new THREE.Mesh(coneGeometry, coneMaterial);
+                        cone.position.y = 1;
+                        cone.castShadow = true;
+                        group.add(cone);
+                        
+                        // Reflective bands
+                        const bandGeometry = new THREE.TorusGeometry(0.4, 0.05, 8, 16);
+                        const bandMaterial = new THREE.MeshStandardMaterial({ 
+                            color: 0xFFFFFF,
+                            emissive: 0xFFFFFF,
+                            emissiveIntensity: 0.5
+                        });
+                        
+                        for (let i = 0; i < 2; i++) {
+                            const band = new THREE.Mesh(bandGeometry, bandMaterial);
+                            band.position.y = 0.7 + i * 0.4;
+                            band.rotation.x = Math.PI / 2;
+                            band.castShadow = true;
+                            group.add(band);
+                        }
+                        
+                        return group;
+                    },
+                    scale: 1,
+                    heightOffset: 0
                 },
-                scale: 1.5,
-                yOffset: 0
-            },
-            {
-                name: "Rocher",
-                create: function() {
-                    const geometry = new THREE.DodecahedronGeometry(1, 1);
-                    const material = new THREE.MeshStandardMaterial({ 
-                        color: 0x888888,
-                        roughness: 0.9,
-                        metalness: 0.1
-                    });
-                    
-                    // Déformer la géométrie
-                    const posAttr = geometry.getAttribute('position');
-                    const positions = posAttr.array;
-                    for (let i = 0; i < positions.length; i += 3) {
-                        positions[i] += (Math.random() - 0.5) * 0.2;
-                        positions[i + 1] += (Math.random() - 0.5) * 0.2;
-                        positions[i + 2] += (Math.random() - 0.5) * 0.2;
-                    }
-                    posAttr.needsUpdate = true;
-                    
-                    return new THREE.Mesh(geometry, material);
+                {
+                    // Rock
+                    create: () => {
+                        const geometry = new THREE.DodecahedronGeometry(1, 1);
+                        const material = new THREE.MeshStandardMaterial({ 
+                            color: 0x888888,
+                            roughness: 0.9,
+                            metalness: 0.1
+                        });
+                        const rock = new THREE.Mesh(geometry, material);
+                        rock.castShadow = true;
+                        rock.receiveShadow = true;
+                        
+                        // Slightly deform the geometry for a more natural appearance
+                        const positionAttribute = rock.geometry.getAttribute('position');
+                        const positions = positionAttribute.array;
+                        
+                        for (let i = 0; i < positions.length; i += 3) {
+                            positions[i] += (Math.random() - 0.5) * 0.2;
+                            positions[i + 1] += (Math.random() - 0.5) * 0.2;
+                            positions[i + 2] += (Math.random() - 0.5) * 0.2;
+                        }
+                        
+                        positionAttribute.needsUpdate = true;
+                        
+                        return rock;
+                    },
+                    scale: 0.8,
+                    heightOffset: 0.8
                 },
-                scale: 1.2,
-                yOffset: 0.8
-            },
-            {
-                name: "Baril",
-                create: function() {
-                    const group = new THREE.Group();
-                    
-                    // Corps du baril
-                    group.add(new THREE.Mesh(
-                        new THREE.CylinderGeometry(0.8, 0.8, 1.5, 16),
-                        new THREE.MeshStandardMaterial({ 
+                {
+                    // Baril
+                    create: () => {
+                        const group = new THREE.Group();
+                        
+                        // Barrel body
+                        const barrelGeometry = new THREE.CylinderGeometry(0.8, 0.8, 1.5, 16);
+                        const barrelMaterial = new THREE.MeshStandardMaterial({ 
                             color: 0xDD2200,
                             roughness: 0.7
-                        })
-                    )).position.y = 0.75;
-                    
-                    // Anneaux
-                    const ringMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
-                    [0.25, 0.75, 1.25].forEach(y => {
-                        const ring = new THREE.Mesh(
-                            new THREE.TorusGeometry(0.82, 0.06, 8, 16),
-                            ringMaterial
-                        );
-                        ring.position.y = y;
-                        ring.rotation.x = Math.PI / 2;
-                        group.add(ring);
-                    });
-                    
-                    return group;
-                },
-                scale: 1.3,
-                yOffset: 0
-            }
-        ];
-
-        // Fonction pour créer un obstacle
-        function createObstacle() {
-            // Choisir un type d'obstacle aléatoire
-            const type = obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
-            const obstacle = type.create();
-            
-            // Appliquer l'échelle et la position
-            obstacle.scale.set(type.scale, type.scale, type.scale);
-            obstacle.position.y += type.yOffset;
-            
-            // Ajouter des ombres
-            obstacle.traverse(obj => {
-                if (obj.isMesh) {
-                    obj.castShadow = true;
-                    obj.receiveShadow = true;
+                        });
+                        const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+                        barrel.position.y = 0.75;
+                        barrel.castShadow = true;
+                        barrel.receiveShadow = true;
+                        group.add(barrel);
+                        
+                        // Barrel rings
+                        const ringGeometry = new THREE.TorusGeometry(0.82, 0.06, 8, 16);
+                        const ringMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
+                        
+                        const ringPositions = [0.25, 0.75, 1.25];
+                        ringPositions.forEach(y => {
+                            const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+                            ring.position.y = y;
+                            ring.rotation.x = Math.PI / 2;
+                            ring.castShadow = true;
+                            group.add(ring);
+                        });
+                        
+                        return group;
+                    },
+                    scale: 1,
+                    heightOffset: 0
                 }
-            });
+            ];
             
-            // Ajouter le nom comme propriété
-            obstacle.userData = { typeName: type.name };
+            // Choose a random obstacle type
+            const selectedType = types[Math.floor(Math.random() * types.length)];
+            const obstacle = selectedType.create();
+            
+            // Apply the scale
+            obstacle.scale.set(selectedType.scale, selectedType.scale, selectedType.scale);
+            
+            // Add the height offset
+            obstacle.position.y += selectedType.heightOffset;
             
             return obstacle;
         }
         
-        // Créer les voitures
+        // Create the main car (red)
         const mainCar = createCar(0xFF0000);
         scene.add(mainCar);
         
-        const otherCar = createCar(0x3366FF);
+        // Create the other cars
+        const otherCars = [];
+        
+        // One blue car
+        const otherCar = createCar(0x3366FF); // Blue
         scene.add(otherCar);
         
-        const otherCars = [{
+        // Starting position at half way on the road
+        otherCars.push({
             car: otherCar,
-            progress: 0.5, // Position à mi-chemin
-            baseSpeed: 0.3,
+            progress: 0.5, // Start at the opposite of our car
+            baseSpeed: 0.3, // Slower than our car
             currentSpeed: 0.3
-        }];
+        });
         
-        // Créer les obstacles
+        // Create and place the obstacles on the road
         const obstacles = [];
         
-        // Placer les obstacles à des positions équidistantes
-        const obstacleSpacing = 1 / config.obstacleCount;
         for (let i = 0; i < config.obstacleCount; i++) {
+            // Create a new obstacle
             const obstacle = createObstacle();
             scene.add(obstacle);
             
-            // Positionner équitablement sur la route, mais pas près du départ
-            const progress = 0.1 + (i * obstacleSpacing);
+            // Choose a random position on the road (but not at the beginning)
+            const progress = 0.1 + Math.random() * 0.8;
             const point = roadCurve.getPoint(progress);
+            
+            // Slightly vary the position to not be exactly in the middle
             const nextPoint = roadCurve.getPoint((progress + 0.01) % 1);
             const direction = new THREE.Vector3().subVectors(nextPoint, point).normalize();
             
-            // Positionner sur la voie de droite
+            // Perpendicular vector to position on the road
             const perpVector = new THREE.Vector3(-direction.z, 0, direction.x).normalize();
+            
+            // Shift the obstacle to the right (our car's lane)
             const laneOffset = config.roadWidth / 4;
+            const offset = laneOffset + (Math.random() * 0.4 - 0.2); // Small random variation
             
             const obstaclePosition = new THREE.Vector3()
                 .copy(point)
-                .add(perpVector.multiplyScalar(laneOffset + (Math.random() * 0.4 - 0.2)));
+                .add(perpVector.multiplyScalar(offset));
             
             obstacle.position.set(obstaclePosition.x, obstacle.position.y, obstaclePosition.z);
+            
+            // Orient the obstacle towards a random direction
             obstacle.rotation.y = Math.random() * Math.PI * 2;
             
+            // Add the obstacle to the list
             obstacles.push({
                 object: obstacle,
                 progress: progress,
@@ -392,7 +419,7 @@
             });
         }
         
-        // Variables de conduite
+        // Driving variables
         let mainCarProgress = 0;
         let mainCarPosition = new THREE.Vector3();
         let mainCarDirection = new THREE.Vector3();
@@ -401,31 +428,55 @@
         let avoidanceOffset = 0;
         let avoidanceDirection = 0;
         let detectedObstacle = null;
-        let obstaclePassedTime = 0;
-        const SAFETY_MARGIN = 0.03;
+        let obstaclePassedTime = 0; // Time elapsed since we passed the obstacle
+        const SAFETY_MARGIN = 0.03; // Safety margin to ensure the entire car has passed the obstacle
         
-        // Utilitaires
+        // Function to calculate the distance between two points on the curve
         function distanceBetweenCurvePoints(progress1, progress2) {
+            // Convert the progressions to actual distance along the curve
             let distance = Math.abs(progress1 - progress2);
-            if (distance > 0.5) distance = 1 - distance;
-            return distance * 200; // Facteur approximatif
+            
+            // Handle the case where the cars are on opposite sides of the looping point (0/1)
+            if (distance > 0.5) {
+                distance = 1 - distance;
+            }
+            
+            // Convert to an approximation of actual distance (depends on the total length of the road)
+            return distance * 200; // Arbitrary factor representing the approximate length of the road
         }
         
+        // Function to check if a car is ahead of the main car
         function isCarAhead(mainProgress, otherProgress) {
+            // Calculate the difference taking into account the looping
             let diff = otherProgress - mainProgress;
             if (diff < -0.5) diff += 1;
             if (diff > 0.5) diff -= 1;
+            
+            // If the difference is small and positive, the car is ahead
             return diff > 0 && diff < 0.5;
         }
         
-        // Fonction pour détecter les obstacles
+        // Function to detect obstacles on the trajectory
         function detectObstacles(carProgress, carDirection, laneOffset) {
+            // Current position of the car
             const carPoint = roadCurve.getPoint(carProgress);
+            const carPos = new THREE.Vector3().copy(carPoint);
             
+            // Perpendicular vector to calculate the position on the lane
+            const perpVector = new THREE.Vector3(-carDirection.z, 0, carDirection.x).normalize();
+            const carLanePos = new THREE.Vector3().copy(carPos).add(perpVector.clone().multiplyScalar(laneOffset));
+            
+            // For each obstacle, check if it is on our trajectory
             for (const obstacle of obstacles) {
+                // Calculate the distance along the curve
                 const distanceOnCurve = distanceBetweenCurvePoints(carProgress, obstacle.progress);
                 
+                // If the obstacle is at a detectable distance and ahead of us
                 if (distanceOnCurve < config.detectionRange && isCarAhead(carProgress, obstacle.progress)) {
+                    // Calculate the lateral distance to the obstacle
+                    const obstaclePos = obstacle.position;
+                    
+                    // Calculate the projected position of the car at the obstacle's progress
                     const projectedPoint = roadCurve.getPoint(obstacle.progress);
                     const projectedDirection = new THREE.Vector3()
                         .subVectors(roadCurve.getPoint((obstacle.progress + 0.01) % 1), projectedPoint)
@@ -435,10 +486,12 @@
                         .copy(projectedPoint)
                         .add(projectedPerpVector.multiplyScalar(laneOffset + avoidanceOffset));
                     
+                    // Distance between the projected position and the obstacle
                     const lateralDistance = new THREE.Vector3()
-                        .subVectors(projectedCarPos, obstacle.position)
+                        .subVectors(projectedCarPos, obstaclePos)
                         .length();
                     
+                    // If we are close enough laterally (risk of collision)
                     if (lateralDistance < 2.5) {
                         return {
                             obstacle: obstacle,
@@ -449,51 +502,30 @@
                 }
             }
             
+            // No obstacle detected
             return null;
         }
         
-        // Mettre en évidence un obstacle
-        function highlightObstacle(obstacle) {
-            obstacle.traverse(child => {
-                if (child.isMesh && child.material) {
-                    if (!child.userData.originalMaterial) {
-                        child.userData.originalMaterial = child.material.clone();
-                    }
-                    
-                    const highlightMaterial = child.material.clone();
-                    highlightMaterial.emissive.set(0x00FF00);
-                    highlightMaterial.emissiveIntensity = 0.6;
-                    child.material = highlightMaterial;
-                }
-            });
-        }
-        
-        // Réinitialiser l'apparence d'un obstacle
-        function resetObstacleHighlight(obstacle) {
-            obstacle.traverse(child => {
-                if (child.isMesh && child.material && child.userData.originalMaterial) {
-                    child.material = child.userData.originalMaterial;
-                    delete child.userData.originalMaterial;
-                }
-            });
-        }
-        
-        // Fonction d'animation
+        // Animation function
         function animate() {
             requestAnimationFrame(animate);
             
-            // --- Mise à jour de la voiture principale ---
+            // --- Update the main car ---
+            // Calculate the speed based on other cars
             let targetSpeed = config.carSpeed;
             
-            // Vérifier les voitures devant
+            // Check the cars ahead of us
             for (const otherCar of otherCars) {
                 if (isCarAhead(mainCarProgress, otherCar.progress)) {
                     const distance = distanceBetweenCurvePoints(mainCarProgress, otherCar.progress);
                     
+                    // If a car is too close ahead, slow down
                     if (distance < config.safeDistance) {
+                        // The closer, the slower
                         const slowdownFactor = Math.min(distance / config.safeDistance, 1);
                         const possibleTargetSpeed = otherCar.currentSpeed * slowdownFactor;
                         
+                        // Take the lowest speed among all cars ahead
                         if (possibleTargetSpeed < targetSpeed) {
                             targetSpeed = possibleTargetSpeed;
                         }
@@ -501,154 +533,224 @@
                 }
             }
             
-            // Appliquer la vitesse progressivement
-            if (mainCarCurrentSpeed > targetSpeed) {
-                mainCarCurrentSpeed = Math.max(targetSpeed, mainCarCurrentSpeed - config.brakeStrength * 0.01);
-            } else {
-                mainCarCurrentSpeed = Math.min(targetSpeed, mainCarCurrentSpeed + 0.005);
-            }
-            
-            // Avancer la voiture principale
+            // Move the main car along the road
             mainCarProgress += mainCarCurrentSpeed / 1000;
             if (mainCarProgress > 1) mainCarProgress -= 1;
             
-            // Obtenir position et direction
+            // Get the current position and direction on the road
             const point = roadCurve.getPoint(mainCarProgress);
             const nextPoint = roadCurve.getPoint((mainCarProgress + 0.01) % 1);
             mainCarPosition.copy(point);
             mainCarDirection.subVectors(nextPoint, point).normalize();
             
-            // Calculer le décalage pour la voie de droite
+            // Calculate the base offset for the right lane
             const perpVector = new THREE.Vector3(-mainCarDirection.z, 0, mainCarDirection.x).normalize();
             const laneOffset = config.roadWidth / 4;
             
-            // Détecter les obstacles
+            // Detect obstacles on our trajectory
             const obstacleInfo = detectObstacles(mainCarProgress, mainCarDirection, laneOffset);
+            
+            // Obstacle status
             const obstacleStatusElement = document.getElementById('obstacleStatus');
             
-            // Gérer l'évitement d'obstacles
+            // Handle obstacle avoidance
             if (!isAvoidingObstacle && obstacleInfo) {
+                // New obstacle detected, start avoidance
                 isAvoidingObstacle = true;
-                avoidanceDirection = -1; // Toujours éviter vers la gauche
+                // Choose the avoidance direction (left = -1, right = 1)
+                // For simplicity, we will always avoid to the left (towards the center of the road)
+                avoidanceDirection = -1;
+                // Remember the obstacle we are avoiding
                 detectedObstacle = obstacleInfo.obstacle;
                 obstaclePassedTime = 0;
                 
                 if (obstacleStatusElement) {
-                    obstacleStatusElement.textContent = `Obstacle détecté : ${detectedObstacle.object.userData.typeName} ! Manœuvre d'évitement...`;
+                    obstacleStatusElement.textContent = "Obstacle détecté ! Manœuvre d'évitement en cours...";
                     obstacleStatusElement.style.color = "#FF3300";
                 }
-                
-                highlightObstacle(detectedObstacle.object);
-            } else if (isAvoidingObstacle && detectedObstacle) {
-                // Vérifier si l'obstacle est dépassé
-                let diff = mainCarProgress - detectedObstacle.progress;
-                if (diff < -0.5) diff += 1;
-                if (diff > 0.5) diff -= 1;
-                
-                const hasPassedObstacle = diff > SAFETY_MARGIN;
-                
-                if (hasPassedObstacle) {
-                    obstaclePassedTime += 1/60; // ~delta time
+            } else if (isAvoidingObstacle) {
+                if (detectedObstacle) {
+                    // Check if we have passed the obstacle
+                    // We consider the obstacle passed when the car's position has passed the obstacle by a certain safety margin
+                    const carProgress = mainCarProgress;
+                    const obstacleProgress = detectedObstacle.progress;
                     
-                    if (obstaclePassedTime > 1.0) { // Attendre 1s après dépassement
-                        isAvoidingObstacle = false;
-                        resetObstacleHighlight(detectedObstacle.object);
-                        detectedObstacle = null;
+                    // Calculate the difference taking into account the looping
+                    let diff = carProgress - obstacleProgress;
+                    if (diff < -0.5) diff += 1;
+                    if (diff > 0.5) diff -= 1;
+                    
+                    // The obstacle is passed when the difference is positive and greater than the safety margin
+                    const hasPassedObstacle = diff > SAFETY_MARGIN;
+                    
+                    if (hasPassedObstacle) {
+                        // Increase the counter of time since we passed the obstacle
+                        obstaclePassedTime += 1/60; // Approximation of delta time (1/60 second)
                         
-                        if (obstacleStatusElement) {
-                            obstacleStatusElement.textContent = "Obstacle évité. Retour à la trajectoire normale.";
-                            obstacleStatusElement.style.color = "#33CC33";
+                        // Only start returning to normal trajectory after a certain delay
+                        // to ensure that the entire car (including the rear) has passed the obstacle
+                        if (obstaclePassedTime > 1.0) { // Delay of one second
+                            // Obstacle completely passed, gradually return to normal trajectory
+                            isAvoidingObstacle = false;
+                            detectedObstacle = null;
                             
-                            setTimeout(() => {
-                                if (obstacleStatusElement) {
-                                    obstacleStatusElement.textContent = "Aucun obstacle détecté.";
-                                    obstacleStatusElement.style.color = "#FFFFFF";
-                                }
-                            }, 3000);
+                            if (obstacleStatusElement) {
+                                obstacleStatusElement.textContent = "Obstacle avoided. Returning to normal trajectory.";
+                                obstacleStatusElement.style.color = "#33CC33";
+                                
+                                // Reset the status after a few seconds
+                                setTimeout(() => {
+                                    if (obstacleStatusElement) {
+                                        obstacleStatusElement.textContent = "No obstacle detected.";
+                                        obstacleStatusElement.style.color = "#FFFFFF";
+                                    }
+                                }, 3000);
+                            }
                         }
                     }
                 }
-            } else if (obstacleStatusElement && obstacleStatusElement.textContent === "") {
-                obstacleStatusElement.textContent = "Aucun obstacle détecté.";
-                obstacleStatusElement.style.color = "#FFFFFF";
+            } else {
+                if (obstacleStatusElement && obstacleStatusElement.textContent === "") {
+                    obstacleStatusElement.textContent = "No obstacle detected.";
+                    obstacleStatusElement.style.color = "#FFFFFF";
+                }
             }
             
-            // Mise à jour du décalage d'évitement
+            // Update the avoidance offset
             if (isAvoidingObstacle) {
+                // Gradually increase the offset until a maximum value
                 const maxOffset = config.roadWidth / 3 * avoidanceDirection;
                 avoidanceOffset += (maxOffset - avoidanceOffset) * 0.1 * config.avoidanceStrength;
             } else {
-                avoidanceOffset *= 0.95; // Retour progressif
+                // Gradually return to the normal position
+                avoidanceOffset *= 0.9;
             }
             
-            // Positionner la voiture principale
+            // Apply the offset to stay on the right lane with avoidance
             const finalPosition = new THREE.Vector3()
                 .copy(point)
                 .add(perpVector.clone().multiplyScalar(laneOffset + avoidanceOffset));
             
+            // Position the main car on the road
             mainCar.position.set(finalPosition.x, point.y + 1, finalPosition.z);
-            mainCar.rotation.y = -Math.atan2(mainCarDirection.z, mainCarDirection.x);
+            
+            // Orient the main car in the direction of the road
+            // Slightly adjust the orientation for the avoidance
+            const targetAngle = Math.atan2(mainCarDirection.z, mainCarDirection.x);
+            mainCar.rotation.y = -targetAngle;
+            
+            // Gradually apply the speed change (progressive acceleration/braking)
+            if (mainCarCurrentSpeed > targetSpeed) {
+                // Braking
+                mainCarCurrentSpeed = Math.max(
+                    targetSpeed,
+                    mainCarCurrentSpeed - config.brakeStrength * 0.01
+                );
+            } else {
+                // Acceleration
+                mainCarCurrentSpeed = Math.min(
+                    targetSpeed,
+                    mainCarCurrentSpeed + 0.005
+                );
+            }
             
             // --- Mise à jour des autres voitures ---
             for (const otherCar of otherCars) {
+                // Move the other cars
                 otherCar.progress += otherCar.currentSpeed / 1000;
                 if (otherCar.progress > 1) otherCar.progress -= 1;
                 
+                // Get position and direction
                 const otherPoint = roadCurve.getPoint(otherCar.progress);
                 const otherNextPoint = roadCurve.getPoint((otherCar.progress + 0.01) % 1);
                 const otherDirection = new THREE.Vector3().subVectors(otherNextPoint, otherPoint).normalize();
+                
+                // Calculate the position on the right lane
                 const otherPerpVector = new THREE.Vector3(-otherDirection.z, 0, otherDirection.x).normalize();
                 
+                // The other cars are also on the right lane
                 const otherFinalPosition = new THREE.Vector3()
                     .copy(otherPoint)
                     .add(otherPerpVector.multiplyScalar(laneOffset));
                 
+                // Position the other car
                 otherCar.car.position.set(otherFinalPosition.x, otherPoint.y + 1, otherFinalPosition.z);
-                otherCar.car.rotation.y = -Math.atan2(otherDirection.z, otherDirection.x);
+                
+                // Orient the other car
+                const otherTargetAngle = Math.atan2(otherDirection.z, otherDirection.x);
+                otherCar.car.rotation.y = -otherTargetAngle;
             }
             
-            // Caméra qui suit la voiture
-            const targetAngle = Math.atan2(mainCarDirection.z, mainCarDirection.x);
+            // Follow the camera with a higher view to see the entire circuit
             camera.position.set(
                 mainCar.position.x - 15 * Math.cos(targetAngle),
-                50,
+                50, // Higher for the entire circuit
                 mainCar.position.z - 15 * Math.sin(targetAngle)
             );
             camera.lookAt(mainCar.position);
             
-            // Mettre à jour les informations
+            // Add information text on speed and obstacles
             const speedInfo = document.getElementById('speedInfo');
             if (speedInfo) {
                 speedInfo.innerHTML = `Vitesse actuelle: ${(mainCarCurrentSpeed/config.carSpeed*100).toFixed(0)}%`;
                 
+                // Change the color based on the speed
                 if (mainCarCurrentSpeed < config.carSpeed * 0.5) {
-                    speedInfo.style.color = '#FF0000'; // Rouge - freinage fort
+                    speedInfo.style.color = '#FF0000'; // Red if we brake hard
                 } else if (mainCarCurrentSpeed < config.carSpeed * 0.8) {
-                    speedInfo.style.color = '#FFAA00'; // Orange - ralentissement
+                    speedInfo.style.color = '#FFAA00'; // Orange if we slow down a bit
                 } else {
-                    speedInfo.style.color = '#FFFFFF'; // Blanc - vitesse normale
+                    speedInfo.style.color = '#FFFFFF'; // White otherwise
                 }
+            }
+            
+            // Update the other cars
+            for (const otherCar of otherCars) {
+                // Move the other cars
+                otherCar.progress += otherCar.currentSpeed / 1000;
+                if (otherCar.progress > 1) otherCar.progress -= 1;
+                
+                // Get position and direction
+                const otherPoint = roadCurve.getPoint(otherCar.progress);
+                const otherNextPoint = roadCurve.getPoint((otherCar.progress + 0.01) % 1);
+                const otherDirection = new THREE.Vector3().subVectors(otherNextPoint, otherPoint).normalize();
+                
+                // Calculate the position on the right lane
+                const otherPerpVector = new THREE.Vector3(-otherDirection.z, 0, otherDirection.x).normalize();
+                const otherLaneOffset = config.roadWidth / 4; // Same lane as our car
+                
+                // The other cars are also on the right lane
+                const otherFinalPosition = new THREE.Vector3()
+                    .copy(otherPoint)
+                    .add(otherPerpVector.multiplyScalar(otherLaneOffset));
+                
+                // Position the other car
+                otherCar.car.position.set(otherFinalPosition.x, otherPoint.y + 1, otherFinalPosition.z);
+                
+                // Orient the other car
+                const otherTargetAngle = Math.atan2(otherDirection.z, otherDirection.x);
+                otherCar.car.rotation.y = -otherTargetAngle;
             }
             
             renderer.render(scene, camera);
         }
         
-        // Gérer le redimensionnement
+        // Handle window resizing
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+        }); 
         
-        // Interface de contrôle
+        // Control interface
         const gui = new dat.GUI();
-        gui.add(config, 'carSpeed', 0.1, 2).name('Vitesse max');
-        gui.add(config, 'safeDistance', 5, 30).name('Distance de sécurité');
-        gui.add(config, 'brakeStrength', 0.1, 1).name('Force de freinage');
-        gui.add(config, 'detectionRange', 5, 30).name('Portée détection');
-        gui.add(config, 'avoidanceStrength', 0.1, 1).name('Force évitement');
+        gui.add(config, 'carSpeed', 0.1, 2).name('Max speed');
+        gui.add(config, 'safeDistance', 5, 30).name('Safety distance');
+        gui.add(config, 'brakeStrength', 0.1, 1).name('Braking force');
+        gui.add(config, 'detectionRange', 5, 30).name('Detection range');
+        gui.add(config, 'avoidanceStrength', 0.1, 1).name('Avoidance force');
         
-        // Démarrer l'animation
+        // Start the animation
         animate();
     </script>
 </body>
