@@ -565,7 +565,7 @@
                 obstaclePassedTime = 0;
                 
                 if (obstacleStatusElement) {
-                    obstacleStatusElement.textContent = "Obstacle détecté ! Manœuvre d'évitement en cours...";
+                    obstacleStatusElement.textContent = "Obstacle detected! Avoidance maneuver in progress...";
                     obstacleStatusElement.style.color = "#FF3300";
                 }
             } else if (isAvoidingObstacle) {
@@ -692,7 +692,7 @@
             // Add information text on speed and obstacles
             const speedInfo = document.getElementById('speedInfo');
             if (speedInfo) {
-                speedInfo.innerHTML = `Vitesse actuelle: ${(mainCarCurrentSpeed/config.carSpeed*100).toFixed(0)}%`;
+                speedInfo.innerHTML = `Current speed: ${(mainCarCurrentSpeed/config.carSpeed*100).toFixed(0)}%`;
                 
                 // Change the color based on the speed
                 if (mainCarCurrentSpeed < config.carSpeed * 0.5) {
